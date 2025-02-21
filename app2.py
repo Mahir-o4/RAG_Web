@@ -1,11 +1,16 @@
 import streamlit as st
-import ollama
+from google import genai
 import requests
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import random
+import os
+
+# Set up Google Gemini API Key
+# Ensure your environment variable is set
+GENAI_API_KEY = os.getenv("GENAI_API_KEY")
 
 # List of common User-Agent strings
 USER_AGENTS = [
@@ -13,23 +18,20 @@ USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.105 Safari/537.36",
     "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:40.0) Gecko/20100101 Firefox/40.0",
     "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:40.0) Gecko/20100101 Firefox/40.0",
-    "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:40.0) Gecko/20100101 Firefox/40.0",
-]  # Choose at random from this list kind of intelligent ik
+]
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,  # Set log level to INFO
+    level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler()  # Print logs in terminal
-    ]
-)  # Logs all the ongoing shits occuring, gonna keep a track for random failures
+    handlers=[logging.StreamHandler()]
+)
 
 # Function to perform DuckDuckGo search and extract URLs
 
 
 def ddg_search(query):
-    results = DDGS().text(query, max_results=5)  # Don't tweak to 10 you fool
+    results = DDGS().text(query, max_results=5)
     urls = [result['href'] for result in results]
 
     if not urls:
@@ -44,18 +46,13 @@ def ddg_search(query):
 
 def get_page(urls):
     content = []
-
-    # change workers if you want but suggested don't go over 5 workers or your brain may crash
     with ThreadPoolExecutor(max_workers=5) as executor:
-        results = executor.map(scrape_url, urls)  # Run scraping in parallel
+        results = executor.map(scrape_url, urls)
 
     for url, result in zip(urls, results):
         if result:
             content.append(result)
-
-            # Log the scraped content in the terminal
             logging.info(f"\n===== Scraped Content from {url} =====\n")
-            # Logs only first 1000 characters, what will you do with the rest of the content? Huh?
             logging.info(result[:1000])
             logging.info("\n====================================\n")
 
@@ -66,8 +63,6 @@ def get_page(urls):
 
 def scrape_url(url):
     try:
-        # Randomly select a User-Agent
-        # I hope I explained this already
         headers = {'User-Agent': random.choice(USER_AGENTS)}
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200:
@@ -78,7 +73,6 @@ def scrape_url(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         paragraphs = soup.find_all('p')
         if not paragraphs:
-            # Hope the website has <p> tags or it's doomed
             logging.warning(f"No <p> tags found in page: {url}")
             return None
 
@@ -88,19 +82,17 @@ def scrape_url(url):
         logging.error(f"Error during scraping {url}: {e}")
         return None
 
-# Function to truncate text
-
-# Don't wanna get the whole movie script so first 400 and also to feed mistral but We will need embeddings for more precise content
+# Function to truncate text (Limits to 400 words)
 
 
 def truncate(text):
     words = text.split()
-    return " ".join(words[:400])  # Limit to first 400 words
+    return " ".join(words[:400])
 
-# Function to create a prompt for Mistral
+# Function to create a prompt for Gemini
 
-# Prompt limit is just 2048 very painful
-def create_prompt_mistral(llm_query, search_results):
+
+def create_prompt_gemini(llm_query, search_results):
     if not search_results:
         return "No search results available. Please refine your query."
 
@@ -110,22 +102,29 @@ def create_prompt_mistral(llm_query, search_results):
         + "\n\n---\n\n".join(search_results)
         + f"\n\nQuestion: {llm_query}\nAnswer:"
     )
-    return [{'role': 'user', 'content': content}]
+    return content
 
-# Function to get response from Mistral
+# Function to get response from Gemini (Updated for correct API usage)
 
 
-def get_mistral_response(prompt):
+def get_gemini_response(prompt):
     try:
-        completion = ollama.chat(model='mistral', messages=prompt)
-        return completion['message']['content']
+        # Initialize Google Gemini API client
+        client = genai.Client(api_key=GENAI_API_KEY)
+
+        # Use the correct method for text generation
+        response = client.models.generate_content(
+            model="gemini-2.0-flash", 
+            contents=prompt
+        )
+
+        return response.text
     except Exception as e:
-        logging.error(f"Error generating response from Mistral: {e}")
-        return f"Error generating response from Mistral: {e}"
+        logging.error(f"Error generating response from Gemini: {e}")
+        return f"Error generating response from Gemini: {e}"
 
 
 # Streamlit UI
-# I don't know how this works find on your own.
 with st.form("prompt_form"):
     search_query = st.text_area("DuckDuckGo search:", "")
     llm_query = st.text_area("LLM prompt:", "")
@@ -137,9 +136,9 @@ with st.form("prompt_form"):
         st.success("Web Scraping Complete!")
 
         if search_results:
-            with st.spinner("Sending data to Mistral..."):
-                prompt = create_prompt_mistral(llm_query, search_results)
-                result = get_mistral_response(prompt)
+            with st.spinner("Sending data to Gemini..."):
+                prompt = create_prompt_gemini(llm_query, search_results)
+                result = get_gemini_response(prompt)
             st.success("Response Generated!")
         else:
             result = "Unable to generate a response due to lack of context."
