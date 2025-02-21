@@ -21,8 +21,7 @@ logging.basicConfig(
     level=logging.INFO,  # Set log level to INFO
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.StreamHandler()  # Print logs in terminal
-    ]
+        logging.StreamHandler()] # Log to the terminal
 )  # Logs all the ongoing shits occuring, gonna keep a track for random failures
 
 # Function to perform DuckDuckGo search and extract URLs
@@ -100,6 +99,8 @@ def truncate(text):
 # Function to create a prompt for Mistral
 
 # Prompt limit is just 2048 very painful
+
+
 def create_prompt_mistral(llm_query, search_results):
     if not search_results:
         return "No search results available. Please refine your query."
