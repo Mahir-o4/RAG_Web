@@ -87,7 +87,7 @@ def scrape_url(url):
 
 def truncate(text):
     words = text.split()
-    return " ".join(words[:400])
+    return " ".join(words[:4000])
 
 # Function to create a prompt for Gemini
 
@@ -97,7 +97,7 @@ def create_prompt_gemini(llm_query, search_results):
         return "No search results available. Please refine your query."
 
     content = (
-        "Answer the question using only the context below.\n\n"
+        "Based on the context below, answer the question in detail. If necessary, provide examples, explanations, or references.\n\n"
         "Context:\n"
         + "\n\n---\n\n".join(search_results)
         + f"\n\nQuestion: {llm_query}\nAnswer:"
